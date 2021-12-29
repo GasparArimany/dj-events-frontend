@@ -4,9 +4,27 @@ import styles from '@/styles/Event.module.css';
 import Link from 'next/link';
 import Image from 'next/image';
 import { FaPencilAlt, FaTimes } from 'react-icons/fa';
+import qs from 'qs';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useRouter } from 'next/router';
 
 export default function EventPage({ event }) {
-	const deleteEvent = (e) => {};
+	const router = useRouter();
+	const deleteEvent = async (e) => {
+		if (confirm('Are you sure?')) {
+			const res = await fetch(`${API_URL}/events/${event.id}`, {
+				method: 'DELETE',
+			});
+			const result = await res.json();
+			if (!res.ok) {
+				toast.error(result.message);
+			} else {
+				router.push('/events');
+			}
+		}
+	};
+	const date = new Date(event.date).toLocaleDateString('es-ES');
 	return (
 		<Layout>
 			<div className={styles.event}>
@@ -21,14 +39,14 @@ export default function EventPage({ event }) {
 					</a>
 				</div>
 				<span>
-					{event.date} at {event.time}
+					{date} at {event.time}
 				</span>
 				<h1>{event.name}</h1>
-				{event.image && (
+				{event.image.data && (
 					<div className={styles.image}>
 						<Image
 							alt='event image'
-							src={event.image}
+							src={event.image.data.attributes.formats.large.url}
 							width={960}
 							height={600}
 						/>
@@ -40,7 +58,6 @@ export default function EventPage({ event }) {
 				<p>{event.description}</p>
 				<h3>Venue: {event.venue}</h3>
 				<p>{event.address}</p>
-
 				<Link href='/events'>
 					<a className='styles.back'>{'<'} Go Back</a>
 				</Link>
@@ -50,10 +67,18 @@ export default function EventPage({ event }) {
 }
 
 export async function getStaticPaths() {
-	const res = await fetch(`${API_URL}/events`);
+	const query = qs.stringify(
+		{
+			sort: ['date:asc'],
+			populate: '*',
+		},
+		{ encodeValuesOnly: true }
+	);
+	const res = await fetch(`${API_URL}/events?${query}`);
 	const events = await res.json();
-
-	const paths = events.map((event) => ({ params: { slug: event.slug } }));
+	const paths = events.data.map((event) => ({
+		params: { slug: event.attributes.slug },
+	}));
 
 	return {
 		paths,
@@ -61,7 +86,21 @@ export async function getStaticPaths() {
 	};
 }
 export async function getStaticProps({ params: { slug } }) {
-	const response = await fetch(`${API_URL}/events/${slug}`);
-	const events = await response.json();
-	return { props: { event: events[0] }, revalidate: 1 };
+	const query = qs.stringify(
+		{
+			filters: {
+				slug: {
+					$eq: slug,
+				},
+			},
+			populate: '*',
+		},
+		{ encodeValuesOnly: true }
+	);
+	const res = await fetch(`${API_URL}/events?${query}`);
+	const events = await res.json();
+	return {
+		props: { event: { id: events.data[0].id, ...events.data[0].attributes } },
+		revalidate: 1,
+	};
 }
